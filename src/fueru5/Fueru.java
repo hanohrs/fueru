@@ -69,77 +69,28 @@ public final class Fueru {
  */
 class TwinIterator<T> {
     private final Iterator<T> origIterator;
+    private final Iterator<T> leftIterator = new ChildIterator(Source.LEFT);
+
     private final ReentrantLock lock = new ReentrantLock();
     private final Condition notLeftAdvanced = lock.newCondition();
     private final Condition notRightAdvanced = lock.newCondition();
-    private T next = null;
-    private State state = State.EQUALLY_ADVANCED;
-    private final Iterator<T> leftIterator = new Iterator<>() {
-        @Override
-        public boolean hasNext() {
-            lock.lock();
-            try {
-                while (state == State.LEFT_ADVANCED)
-                    notLeftAdvanced.await();
-                return TwinIterator.this.hasNext(Source.LEFT);
-            } catch (InterruptedException e) {
-                throw new RuntimeException(e);
-            } finally {
-                lock.unlock();
-            }
-        }
-
-        @Override
-        public T next() throws NoSuchElementException {
-            lock.lock();
-            try {
-                while (state == State.LEFT_ADVANCED)
-                    notLeftAdvanced.await();
-                notRightAdvanced.signal();
-                return TwinIterator.this.next(Source.LEFT);
-            } catch (InterruptedException e) {
-                throw new RuntimeException(e);
-            } finally {
-                lock.unlock();
-            }
-        }
-    };
-    private final Iterator<T> rightIterator = new Iterator<>() {
-        @Override
-        public boolean hasNext() {
-            lock.lock();
-            try {
-                while (state == State.RIGHT_ADVANCED)
-                    notRightAdvanced.await();
-                return TwinIterator.this.hasNext(Source.RIGHT);
-            } catch (InterruptedException e) {
-                throw new RuntimeException(e);
-            } finally {
-                lock.unlock();
-            }
-        }
-
-        @Override
-        public T next() throws NoSuchElementException {
-            lock.lock();
-            try {
-                while (state == State.RIGHT_ADVANCED)
-                    notRightAdvanced.await();
-                notLeftAdvanced.signal();
-                return TwinIterator.this.next(Source.RIGHT);
-            } catch (InterruptedException e) {
-                throw new RuntimeException(e);
-            } finally {
-                lock.unlock();
-            }
-        }
-    };
+    private final Iterator<T> rightIterator = new ChildIterator(Source.RIGHT);
+    private volatile T next = null;
+    private volatile State state = State.EQUALLY_ADVANCED;
 
     TwinIterator(Iterator<T> iterator) {
         this.origIterator = iterator;
     }
 
-    private boolean hasNext(Source source) {
+    public Iterator<T> getLeftIterator() {
+        return leftIterator;
+    }
+
+    public Iterator<T> getRightIterator() {
+        return rightIterator;
+    }
+
+    private boolean hasNextFor(Source source) {
         return switch (state) {
             case EQUALLY_ADVANCED -> origIterator.hasNext();
             case LEFT_ADVANCED -> switch (source) {
@@ -153,7 +104,7 @@ class TwinIterator<T> {
         };
     }
 
-    private T next(Source source) {
+    private synchronized T nextFor(Source source) {
         state = switch (state) {
             case EQUALLY_ADVANCED -> {
                 updateNext();
@@ -187,15 +138,59 @@ class TwinIterator<T> {
         }
     }
 
-    public Iterator<T> getLeftIterator() {
-        return leftIterator;
-    }
-
-    public Iterator<T> getRightIterator() {
-        return rightIterator;
-    }
+    private enum Source {LEFT, RIGHT}
 
     private enum State {EQUALLY_ADVANCED, LEFT_ADVANCED, RIGHT_ADVANCED}
 
-    private enum Source {LEFT, RIGHT}
+    @SuppressWarnings("NonStaticInnerClassInSecureContext")
+    final class ChildIterator implements Iterator<T> {
+        private final Source me;
+
+        ChildIterator(Source sourceID) {
+            me = sourceID;
+        }
+
+        @Override
+        public boolean hasNext() {
+            lock.lock();
+            try {
+                awaitForTheOther();
+                return TwinIterator.this.hasNextFor(me);
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
+            } finally {
+                lock.unlock();
+            }
+        }
+
+        @Override
+        public T next() throws NoSuchElementException {
+            lock.lock();
+            try {
+                awaitForTheOther();
+                switch (me) {
+                    case LEFT -> notRightAdvanced.signal();
+                    case RIGHT -> notLeftAdvanced.signal();
+                }
+                return TwinIterator.this.nextFor(me);
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
+            } finally {
+                lock.unlock();
+            }
+        }
+
+        private void awaitForTheOther() throws InterruptedException {
+            switch (me) {
+                case LEFT -> {
+                    while (state == State.LEFT_ADVANCED)
+                        notLeftAdvanced.await();
+                }
+                case RIGHT -> {
+                    while (state == State.RIGHT_ADVANCED)
+                        notRightAdvanced.await();
+                }
+            }
+        }
+    }
 }
