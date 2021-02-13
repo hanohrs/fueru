@@ -67,7 +67,7 @@ public final class Fueru {
  * 1つの Iterator から、2つのスレッドでそれぞれ使うための Iterator を作り出すクラス。
  * ディープ コピーどころか clone もしていないので、要素の値を書き換えたりしないこと！
  */
-class TwinIterator<T> {
+final class TwinIterator<T> {
     private final Iterator<T> origIterator;
     private final ReentrantLock lock = new ReentrantLock();
     private final Condition notLeftAdvanced = lock.newCondition();
