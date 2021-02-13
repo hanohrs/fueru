@@ -77,6 +77,10 @@ class TwinIterator<T> {
     private volatile T next = null;
     private volatile State state = State.EQUALLY_ADVANCED;
 
+    private enum Source {LEFT, RIGHT}
+
+    private enum State {EQUALLY_ADVANCED, LEFT_ADVANCED, RIGHT_ADVANCED}
+
     TwinIterator(Iterator<T> iterator) {
         this.origIterator = iterator;
     }
@@ -132,10 +136,6 @@ class TwinIterator<T> {
         else
             throw new NoSuchElementException();
     }
-
-    private enum Source {LEFT, RIGHT}
-
-    private enum State {EQUALLY_ADVANCED, LEFT_ADVANCED, RIGHT_ADVANCED}
 
     @SuppressWarnings("NonStaticInnerClassInSecureContext")
     final class ChildIterator implements Iterator<T> {
