@@ -69,11 +69,10 @@ public final class Fueru {
  */
 class TwinIterator<T> {
     private final Iterator<T> origIterator;
-    private final Iterator<T> leftIterator = new ChildIterator(Source.LEFT);
-
     private final ReentrantLock lock = new ReentrantLock();
     private final Condition notLeftAdvanced = lock.newCondition();
     private final Condition notRightAdvanced = lock.newCondition();
+    private final Iterator<T> leftIterator = new ChildIterator(Source.LEFT);
     private final Iterator<T> rightIterator = new ChildIterator(Source.RIGHT);
     private volatile T next = null;
     private volatile State state = State.EQUALLY_ADVANCED;
@@ -107,7 +106,12 @@ class TwinIterator<T> {
     private synchronized T nextFor(Source source) {
         state = switch (state) {
             case EQUALLY_ADVANCED -> {
-                updateNext();
+                try {
+                    next = origIterator.next();
+                } catch (NoSuchElementException e) {
+                    next = null;
+                    throw e;
+                }
                 yield switch (source) {
                     case LEFT -> State.LEFT_ADVANCED;
                     case RIGHT -> State.RIGHT_ADVANCED;
@@ -127,15 +131,6 @@ class TwinIterator<T> {
             return next;
         else
             throw new NoSuchElementException();
-    }
-
-    private void updateNext() {
-        try {
-            next = origIterator.next();
-        } catch (NoSuchElementException e) {
-            next = null;
-            throw e;
-        }
     }
 
     private enum Source {LEFT, RIGHT}
