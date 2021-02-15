@@ -50,7 +50,7 @@ public final class Fueru {
      * Stream をふやす
      */
     @NotNull
-    private static <T> Twin<Stream<T>> fuyasu(Stream<T> stream) {
+    static <T> Twin<Stream<T>> fuyasu(Stream<T> stream) {
         final TwinIterator<T> twinIterator = new TwinIterator<>(stream.iterator());
         Spliterator<T> leftSpliterator =
                 Spliterators.spliteratorUnknownSize(twinIterator.getLeftIterator(), 0);
