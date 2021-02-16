@@ -28,7 +28,7 @@ public class Katamaru {
 
             executor.shutdown();
             //noinspection ResultOfMethodCallIgnored
-            executor.awaitTermination(20, TimeUnit.SECONDS);
+            executor.awaitTermination(30, TimeUnit.SECONDS);
         }
 
         System.out.println("################");
